@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import Navbar from "../components/Navbar";
 
 import CopyImg from "../assets/copy.svg";
 import TickImg from "../assets/tick.svg";
+import HamburgerImg from "../assets/menu.svg";
 
 const sanitizeCode = (code = "") => {
   return code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -113,7 +115,7 @@ const AnswerRenderer = React.memo(({ answer }) => {
                     <tr>
                       {block.columns.map((col, i) => (
                         <th key={i} className="px-4 py-2 font-semibold text-gray-700 dark:text-gray-200">
-                          {col}
+                          {col.content ? renderInline(col.content) : col}
                         </th>
                       ))}
                     </tr>
@@ -124,7 +126,7 @@ const AnswerRenderer = React.memo(({ answer }) => {
                       <tr key={rIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                         {row.map((cell, cIndex) => (
                           <td key={cIndex} className="px-4 py-2 text-gray-700 dark:text-gray-200">
-                            {cell}
+                            {cell.content ? renderInline(cell.content) : cell}
                           </td>
                         ))}
                       </tr>
@@ -202,32 +204,30 @@ const CodeBlock = ({ code }) => {
   const safeCode = sanitizeCode(code);
 
   return (
-    <div className="relative overflow-x-auto rounded-lg border border-gray-200 bg-gray-900 p-4 text-sm dark:border-gray-700">
-      <button onClick={handleCopy} className="absolute right-3 top-3 rounded bg-gray-700 px-2 py-1 text-xs text-white hover:bg-gray-600 cursor-pointer">
-        {copied ? <img src={TickImg} width="20px" /> : <img src={CopyImg} width="20px" />}
-      </button>
-
-      <pre className="text-gray-100">
-        <code dangerouslySetInnerHTML={{ __html: safeCode }} />
-      </pre>
+    <div className="relative rounded-lg border border-gray-200 bg-gray-900 px-2 py-4 text-sm dark:border-gray-700">
+      <div className="overflow-x-auto  mr-8">
+        <button onClick={handleCopy} className="absolute right-2 top-3 rounded bg-gray-700 p-1 text-xs text-white hover:bg-gray-600 cursor-pointer">
+          {copied ? <img src={TickImg} alt="tick" width="20px" /> : <img src={CopyImg} alt="copy" width="20px" />}
+        </button>
+        <pre className="text-gray-100">
+          <code dangerouslySetInnerHTML={{ __html: safeCode }} />
+        </pre>
+      </div>
     </div>
   );
 };
 
 export default function Topic() {
   const { slug } = useParams();
+  const navigate = useNavigate();
 
   const [content, setContent] = useState([]);
   const [activeSubtopic, setActiveSubtopic] = useState("");
   const [searchText, setSearchText] = useState("");
   const [debouncedSearchText, setDebouncedSearchText] = useState("");
+  const [toggleBar, setToggleBar] = useState(false);
 
   const sectionRefs = useRef({});
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchText(searchText), 300);
-    return () => clearTimeout(timer);
-  }, [searchText]);
 
   const isSearching = debouncedSearchText.trim() !== "";
 
@@ -242,9 +242,15 @@ export default function Topic() {
   }, []);
 
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchText(searchText), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => {
+    if (!slug) navigate("/404");
     const getData = async () => {
       try {
-        const res = await fetch(`https://tanmayvedpathak.github.io/interview-notes/${slug}.json`);
+        const res = await fetch(import.meta.env.VITE_API_URL + slug + ".json");
         if (!res.ok) {
           throw new Error("Something went wrong");
         }
@@ -256,6 +262,7 @@ export default function Topic() {
         setContent(processedData);
       } catch (error) {
         console.log(error);
+        navigate("/404");
       }
     };
 
@@ -270,37 +277,7 @@ export default function Topic() {
 
     if (!container || !headings.length) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Get only visible headings
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          // Sort by distance from top of container
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-
-        if (visible.length > 0) {
-          const closest = visible[0];
-          setActiveSubtopic(closest.target.id);
-        }
-      },
-      {
-        root: container, // 🔥 important: use scroll container
-        rootMargin: "-10% 0px -80% 0px", // tweak for top detection
-        threshold: [0, 1],
-      },
-    );
-
-    headings.forEach((heading) => observer.observe(heading));
-
-    return () => observer.disconnect();
-  }, [content]);
-
-  useEffect(() => {
-    const container = document.querySelector(".scroll-container");
-    if (!container) return;
-
     const handleScroll = () => {
-      const headings = Array.from(container.querySelectorAll("h2[id]"));
       const containerTop = container.getBoundingClientRect().top;
 
       let active = null;
@@ -327,11 +304,38 @@ export default function Topic() {
 
     handleScroll();
 
-    return () => container.removeEventListener("scroll", handleScroll);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Get only visible headings
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          // Sort by distance from top of container
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+
+        if (visible.length > 0) {
+          const closest = visible[0];
+          setActiveSubtopic(closest.target.id);
+        }
+      },
+      {
+        root: container,
+        rootMargin: "-10% 0px -80% 0px",
+        threshold: [0, 1],
+      },
+    );
+
+    headings.forEach((heading) => observer.observe(heading));
+
+    return () => {
+      observer.disconnect();
+      container.removeEventListener("scroll", handleScroll);
+    };
   }, [content]);
 
   return (
     <>
+      <Navbar />
+
       <div className="mb-4 flex items-center gap-2 px-2">
         <input
           type="text"
@@ -355,9 +359,13 @@ export default function Topic() {
         </div>
       )}
 
-      <div className="scroll-container flex relative h-[calc(100vh-130px)] overflow-auto">
+      <button onClick={() => setToggleBar((prev) => !prev)} className="bg-gray-700 p-1 text-xs text-white hover:bg-gray-600 cursor-pointer absolute top-32.5 right-2.5 z-10 block lg:hidden">
+        <img src={HamburgerImg} alt="hamburger" width="20px" />
+      </button>
+
+      <div className="scroll-container flex relative">
         {!isSearching && (
-          <div className="w-[20%] h-[calc(100vh-130px)] overflow-auto sticky top-0 border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 hidden lg:block">
+          <div className={`w-[90%] lg:w-[20%] h-[calc(100vh-130px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}>
             {content?.map((data, index) => {
               const showSubtopic = index === 0 || content[index - 1].subTopic !== data.subTopic;
 
@@ -369,7 +377,7 @@ export default function Topic() {
                 <p
                   key={data.subTopic}
                   onClick={() => document.getElementById(data.subTopic)?.scrollIntoView({ behavior: "smooth" })}
-                  className={`my-2 cursor-pointer rounded-md px-3 py-2 text-sm transition
+                  className={`w-[90%] my-2 cursor-pointer rounded-md px-3 py-2 text-sm transition
                   ${isActive ? "bg-indigo-100 text-indigo-700 font-semibold dark:bg-indigo-900 dark:text-indigo-300" : "text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-slate-800"}
                 `}
                 >
@@ -379,7 +387,7 @@ export default function Topic() {
             })}
           </div>
         )}
-        <div className="w-full lg:w-[80%] flex flex-col gap-6 px-2 mx-auto">
+        <div className="w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
           {dataToRender?.map((data, index) => {
             const showSubtopic = !isSearching && (index === 0 || content[index - 1]?.subTopic !== data.subTopic);
 
