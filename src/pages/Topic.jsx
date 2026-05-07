@@ -1,13 +1,31 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+
 import Navbar from "../components/Navbar";
 
-import CopyImg from "../assets/copy.svg";
-import TickImg from "../assets/tick.svg";
-import HamburgerImg from "../assets/menu.svg";
+import CopyIcon from "../assets/copy.svg";
+import TickIcon from "../assets/tick.svg";
+import HamburgerIcon from "../assets/menu.svg";
+import SearchIcon from "../assets/search.svg";
 
-const sanitizeCode = (code = "") => {
-  return code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+const processData = (data) => {
+  return data.map((item) => ({
+    ...item,
+    searchableText: item.answer.map(extractTextFromBlock).join(" ").toLowerCase(),
+  }));
+};
+
+const renderItem = (item, i) => {
+  if (Array.isArray(item)) {
+    return <li key={i}>{renderInline(item)}</li>;
+  }
+
+  if (item.type === "list") {
+    return <>{item.style === "ordered" ? <ol className="list-decimal pl-8">{item.items.map(renderItem)}</ol> : <ul className="list-[circle] pl-8">{item.items.map(renderItem)}</ul>}</>;
+  }
+
+  return <li key={i}>{item}</li>;
 };
 
 const renderInline = (content = []) => {
@@ -36,24 +54,89 @@ const renderInline = (content = []) => {
   });
 };
 
+const renderHeading = (block, index) => {
+  return (
+    <>
+      <h4 key={index} className="text-lg text-gray-800 dark:text-gray-200">
+        {block.content ? renderInline(block.content) : block.text}
+      </h4>
+    </>
+  );
+};
+
+const renderParagraph = (block, index) => {
+  return (
+    <>
+      <p key={index} className="text-gray-800 dark:text-gray-200">
+        {block.content ? renderInline(block.content) : block.text}
+      </p>
+    </>
+  );
+};
+
+const renderList = (block, index) => {
+  if (block.style === "ordered") {
+    return (
+      <ol key={index} className="list-decimal pl-6 space-y-1 text-gray-800 dark:text-gray-200">
+        {block.items.map(renderItem)}
+      </ol>
+    );
+  }
+
+  return (
+    <ul key={index} className="list-disc pl-6 space-y-1 text-gray-800 dark:text-gray-200">
+      {block.items.map(renderItem)}
+    </ul>
+  );
+};
+
+const renderTable = (block, index) => {
+  return (
+    <div key={index} className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+      <table className="min-w-full text-sm text-left">
+        <thead className="bg-gray-100 dark:bg-gray-800">
+          <tr>
+            {block.columns.map((col, i) => (
+              <th key={i} className="px-4 py-2 font-semibold text-gray-700 dark:text-gray-200">
+                {col.content ? renderInline(col.content) : col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody className="divide-y dark:divide-gray-700">
+          {block.data.map((row, rIndex) => (
+            <tr key={rIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+              {row.map((cell, cIndex) => (
+                <td key={cIndex} className="px-4 py-2 text-gray-700 dark:text-gray-200">
+                  {cell.content ? renderInline(cell.content) : cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const BLOCK_RENDERERS = {
+  h4: renderHeading,
+  paragraph: renderParagraph,
+  list: renderList,
+  table: renderTable,
+};
+
 const AnswerRenderer = React.memo(({ answer }) => {
   return (
     <div className="flex flex-col gap-3 text-[15px] leading-relaxed">
       {answer.map((block, index) => {
         switch (block.type) {
           case "h4":
-            return (
-              <h4 key={index} className="text-lg text-gray-800 dark:text-gray-200">
-                {block.content ? renderInline(block.content) : block.text}
-              </h4>
-            );
+            return BLOCK_RENDERERS.h4(block, index);
 
           case "paragraph":
-            return (
-              <p key={index} className="text-gray-800 dark:text-gray-200">
-                {block.content ? renderInline(block.content) : block.text}
-              </p>
-            );
+            return BLOCK_RENDERERS.paragraph(block, index);
 
           case "bold":
             return (
@@ -78,63 +161,13 @@ const AnswerRenderer = React.memo(({ answer }) => {
             );
 
           case "list":
-            const renderItem = (item, i) => {
-              if (Array.isArray(item)) {
-                return <li key={i}>{renderInline(item)}</li>;
-              }
-
-              if (item.type === "list") {
-                return <>{item.style === "ordered" ? <ol className="list-decimal pl-8">{item.items.map(renderItem)}</ol> : <ul className="list-[circle] pl-8">{item.items.map(renderItem)}</ul>}</>;
-              }
-
-              return <li key={i}>{item}</li>;
-            };
-
-            if (block.style === "ordered") {
-              return (
-                <ol key={index} className="list-decimal pl-6 space-y-1 text-gray-800 dark:text-gray-200">
-                  {block.items.map(renderItem)}
-                </ol>
-              );
-            }
-
-            return (
-              <ul key={index} className="list-disc pl-6 space-y-1 text-gray-800 dark:text-gray-200">
-                {block.items.map(renderItem)}
-              </ul>
-            );
+            return BLOCK_RENDERERS.list(block, index);
 
           case "code":
             return <CodeBlock key={index} code={block.code} />;
 
           case "table":
-            return (
-              <div key={index} className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                <table className="min-w-full text-sm text-left">
-                  <thead className="bg-gray-100 dark:bg-gray-800">
-                    <tr>
-                      {block.columns.map((col, i) => (
-                        <th key={i} className="px-4 py-2 font-semibold text-gray-700 dark:text-gray-200">
-                          {col.content ? renderInline(col.content) : col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y dark:divide-gray-700">
-                    {block.data.map((row, rIndex) => (
-                      <tr key={rIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                        {row.map((cell, cIndex) => (
-                          <td key={cIndex} className="px-4 py-2 text-gray-700 dark:text-gray-200">
-                            {cell.content ? renderInline(cell.content) : cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
+            return (BLOCK_RENDERERS.table(block), index);
 
           default:
             return block.type;
@@ -201,16 +234,14 @@ const CodeBlock = ({ code }) => {
     }
   };
 
-  const safeCode = sanitizeCode(code);
-
   return (
     <div className="relative rounded-lg border border-gray-200 bg-gray-900 px-2 py-4 text-sm dark:border-gray-700">
       <div className="overflow-x-auto  mr-8">
         <button onClick={handleCopy} className="absolute right-2 top-3 rounded bg-gray-700 p-1 text-xs text-white hover:bg-gray-600 cursor-pointer">
-          {copied ? <img src={TickImg} alt="tick" width="20px" /> : <img src={CopyImg} alt="copy" width="20px" />}
+          {copied ? <img src={TickIcon} alt="tick" width="20px" /> : <img src={CopyIcon} alt="copy" width="20px" />}
         </button>
-        <pre className="text-gray-100">
-          <code dangerouslySetInnerHTML={{ __html: safeCode }} />
+        <pre className="text-gray-100 overflow-x-auto">
+          <code>{code}</code>
         </pre>
       </div>
     </div>
@@ -226,6 +257,8 @@ export default function Topic() {
   const [searchText, setSearchText] = useState("");
   const [debouncedSearchText, setDebouncedSearchText] = useState("");
   const [toggleBar, setToggleBar] = useState(false);
+  const [toggleSearch, setToggleSearch] = useState(false);
+  const [error, setError] = useState(false);
 
   const sectionRefs = useRef({});
 
@@ -239,6 +272,7 @@ export default function Topic() {
 
   const handleClearSearch = useCallback(() => {
     setSearchText("");
+    setToggleSearch(false);
   }, []);
 
   useEffect(() => {
@@ -247,22 +281,53 @@ export default function Topic() {
   }, [searchText]);
 
   useEffect(() => {
-    if (!slug) navigate("/404");
+    if (!slug) {
+      navigate("/404");
+      return;
+    }
+
+    const CACHE_KEY = `topic_${slug}`;
+    const CACHE_DURATION = 1000 * 60 * 30;
+
     const getData = async () => {
       try {
+        const cachedData = sessionStorage.getItem(CACHE_KEY);
+
+        if (cachedData) {
+          const parsedData = JSON.parse(cachedData);
+
+          const isExpired = Date.now() > parsedData.expiry;
+
+          if (!isExpired) {
+            setContent(parsedData.data);
+            return;
+          }
+
+          sessionStorage.removeItem(CACHE_KEY);
+        }
+
         const res = await fetch(import.meta.env.VITE_API_URL + slug + ".json");
+
         if (!res.ok) {
           throw new Error("Something went wrong");
         }
+
         const data = await res.json();
-        const processedData = data.map((item) => ({
-          ...item,
-          searchableText: item.answer.map(extractTextFromBlock).join(" ").toLowerCase(),
-        }));
+
+        const processedData = processData(data);
+
+        sessionStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            data: processedData,
+            expiry: Date.now() + CACHE_DURATION,
+          }),
+        );
+
         setContent(processedData);
       } catch (error) {
         console.log(error);
-        navigate("/404");
+        setError(true);
       }
     };
 
@@ -304,124 +369,123 @@ export default function Topic() {
 
     handleScroll();
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Get only visible headings
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          // Sort by distance from top of container
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-
-        if (visible.length > 0) {
-          const closest = visible[0];
-          setActiveSubtopic(closest.target.id);
-        }
-      },
-      {
-        root: container,
-        rootMargin: "-10% 0px -80% 0px",
-        threshold: [0, 1],
-      },
-    );
-
-    headings.forEach((heading) => observer.observe(heading));
-
     return () => {
-      observer.disconnect();
       container.removeEventListener("scroll", handleScroll);
     };
   }, [content]);
 
   return (
     <>
+      <Helmet key={slug}>
+        <title>{slug ? `${slug.toUpperCase()} Notes` : "Notes App"}</title>
+      </Helmet>
+
       <Navbar />
 
-      <div className="mb-4 flex items-center gap-2 px-2">
-        <input
-          type="text"
-          placeholder="Search questions..."
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-slate-900"
-        />
+      <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">{slug.toUpperCase()}</h2>
 
-        {searchText && (
-          <button onClick={handleClearSearch} className="rounded-md bg-gray-300 px-3 py-2 text-sm hover:bg-gray-400">
-            ✖
+      {error ? (
+        <>
+          <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">Not data found</h2>
+        </>
+      ) : (
+        <>
+          <div className={`${toggleSearch ? "w-full" : "w-1/5"} mb-4 flex items-center gap-2 px-2 absolute top-20 left-0 z-20`}>
+            {toggleSearch ? (
+              <>
+                <input
+                  type="text"
+                  placeholder="Search questions..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-slate-900"
+                />
+
+                <button onClick={handleClearSearch} className="rounded-md bg-gray-300 px-3 py-2 text-sm hover:bg-gray-400">
+                  ✖
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setToggleSearch(true)} className="bg-gray-700 p-2 text-xs text-white hover:bg-gray-600 rounded-full cursor-pointer z-10">
+                  <img src={SearchIcon} alt="search" width="16px" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {isSearching && dataToRender.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+              <p className="text-lg font-semibold">No results found</p>
+              <p className="text-sm mt-1">Try different keywords</p>
+            </div>
+          )}
+
+          <button onClick={() => setToggleBar((prev) => !prev)} className="bg-gray-700 p-1 text-xs text-white hover:bg-gray-600 cursor-pointer absolute top-20 right-2.5 z-10 block lg:hidden">
+            <img src={HamburgerIcon} alt="hamburger" width="20px" />
           </button>
-        )}
-      </div>
 
-      {isSearching && dataToRender.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-          <p className="text-lg font-semibold">No results found</p>
-          <p className="text-sm mt-1">Try different keywords</p>
-        </div>
-      )}
+          <div className="scroll-container flex relative">
+            {!isSearching && (
+              <div className={`w-[90%] lg:w-[20%] h-[calc(100vh-130px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}>
+                {content?.map((data, index) => {
+                  const showSubtopic = index === 0 || content[index - 1].subTopic !== data.subTopic;
 
-      <button onClick={() => setToggleBar((prev) => !prev)} className="bg-gray-700 p-1 text-xs text-white hover:bg-gray-600 cursor-pointer absolute top-32.5 right-2.5 z-10 block lg:hidden">
-        <img src={HamburgerImg} alt="hamburger" width="20px" />
-      </button>
+                  if (!showSubtopic) return null;
 
-      <div className="scroll-container flex relative">
-        {!isSearching && (
-          <div className={`w-[90%] lg:w-[20%] h-[calc(100vh-130px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}>
-            {content?.map((data, index) => {
-              const showSubtopic = index === 0 || content[index - 1].subTopic !== data.subTopic;
+                  const isActive = activeSubtopic === data.subTopic;
 
-              if (!showSubtopic) return null;
-
-              const isActive = activeSubtopic === data.subTopic;
-
-              return (
-                <p
-                  key={data.subTopic}
-                  onClick={() => document.getElementById(data.subTopic)?.scrollIntoView({ behavior: "smooth" })}
-                  className={`w-[90%] my-2 cursor-pointer rounded-md px-3 py-2 text-sm transition
+                  return (
+                    <p
+                      key={data.subTopic}
+                      onClick={() => document.getElementById(data.subTopic)?.scrollIntoView({ behavior: "smooth" })}
+                      className={`w-[90%] my-2 cursor-pointer rounded-md px-3 py-2 text-sm transition
                   ${isActive ? "bg-indigo-100 text-indigo-700 font-semibold dark:bg-indigo-900 dark:text-indigo-300" : "text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-slate-800"}
                 `}
-                >
-                  {data.subTopic}
-                </p>
-              );
-            })}
+                    >
+                      {data.subTopic}
+                    </p>
+                  );
+                })}
+              </div>
+            )}
+            <div className="w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
+              {dataToRender?.map((data, index) => {
+                const showSubtopic = !isSearching && (index === 0 || content[index - 1]?.subTopic !== data.subTopic);
+
+                return (
+                  <React.Fragment key={data.id}>
+                    {showSubtopic && (
+                      <h2
+                        ref={(el) => {
+                          if (el) sectionRefs.current[data.subTopic] = el;
+                        }}
+                        id={data.subTopic}
+                        className="my-8 border-l-4 border-indigo-500 pl-4 text-2xl font-bold text-gray-900 dark:text-white"
+                      >
+                        {data.subTopic}
+                      </h2>
+                    )}
+
+                    <div className="rounded-xl border border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900">
+                      <div className="mb-3 border-b pb-2">
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                          <span className="mr-2 text-indigo-600 dark:text-indigo-400">Q.{index + 1}</span>
+                          {data?.question}
+                        </h3>
+                      </div>
+
+                      <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer</p>
+
+                      <AnswerRenderer answer={data?.answer} />
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
-        )}
-        <div className="w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
-          {dataToRender?.map((data, index) => {
-            const showSubtopic = !isSearching && (index === 0 || content[index - 1]?.subTopic !== data.subTopic);
-
-            return (
-              <React.Fragment key={data.id}>
-                {showSubtopic && (
-                  <h2
-                    ref={(el) => {
-                      if (el) sectionRefs.current[data.subTopic] = el;
-                    }}
-                    id={data.subTopic}
-                    className="my-8 border-l-4 border-indigo-500 pl-4 text-2xl font-bold text-gray-900 dark:text-white"
-                  >
-                    {data.subTopic}
-                  </h2>
-                )}
-
-                <div className="rounded-xl border border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900">
-                  <div className="mb-3 border-b pb-2">
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                      <span className="mr-2 text-indigo-600 dark:text-indigo-400">Q.{index + 1}</span>
-                      {data?.question}
-                    </h3>
-                  </div>
-
-                  <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer</p>
-
-                  <AnswerRenderer answer={data?.answer} />
-                </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
+        </>
+      )}
     </>
   );
 }
