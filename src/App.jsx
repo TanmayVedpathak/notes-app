@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
 import Loader from "./components/Loader";
+import Navbar from "./components/Navbar";
 import NotFound from "./pages/NotFound";
 
 const Home = lazy(() => import("./pages/Home"));
@@ -11,6 +12,7 @@ function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
+        <Navbar />
         <Routes>
           <Route
             path="/"

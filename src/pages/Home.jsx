@@ -1,6 +1,5 @@
 import { Helmet } from "react-helmet-async";
 
-import Navbar from "../components/Navbar";
 import TopicCard from "../components/TopicCard";
 
 import BasicIcon from "../assets/coding.png";
@@ -29,7 +28,6 @@ export default function Home() {
       <Helmet>
         <title>Notes App</title>
       </Helmet>
-      <Navbar />
 
       <div className="p-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {topics.map((topic) => (

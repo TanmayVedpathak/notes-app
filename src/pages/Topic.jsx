@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from "react"
 import { useNavigate, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 
-import Navbar from "../components/Navbar";
+import Loader from "../components/Loader";
 
 import CopyIcon from "../assets/copy.svg";
 import TickIcon from "../assets/tick.svg";
@@ -167,7 +167,7 @@ const AnswerRenderer = React.memo(({ answer }) => {
             return <CodeBlock key={index} code={block.code} />;
 
           case "table":
-            return (BLOCK_RENDERERS.table(block), index);
+            return BLOCK_RENDERERS.table(block, index);
 
           default:
             return block.type;
@@ -259,8 +259,60 @@ export default function Topic() {
   const [toggleBar, setToggleBar] = useState(false);
   const [toggleSearch, setToggleSearch] = useState(false);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  const searchInputRef = useRef(null);
   const sectionRefs = useRef({});
+
+  const CACHE_KEY = `topic_${slug}`;
+  const CACHE_DURATION = Number(import.meta.env.VITE_CACHE_TIME);
+
+  const getData = async () => {
+    try {
+      setLoading(true);
+      setError(false);
+
+      const cachedData = sessionStorage.getItem(CACHE_KEY);
+
+      if (cachedData) {
+        const parsedData = JSON.parse(cachedData);
+
+        const isExpired = Date.now() > Number(parsedData.expiry);
+
+        if (!isExpired) {
+          setContent(parsedData.data);
+          return;
+        }
+
+        sessionStorage.removeItem(CACHE_KEY);
+      }
+
+      const res = await fetch(import.meta.env.VITE_API_URL + slug + ".json");
+
+      if (!res.ok) {
+        throw new Error("Something went wrong");
+      }
+
+      const data = await res.json();
+
+      const processedData = processData(data);
+
+      sessionStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          data: processedData,
+          expiry: Date.now() + CACHE_DURATION,
+        }),
+      );
+
+      setContent(processedData);
+    } catch (error) {
+      console.log(error);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const isSearching = debouncedSearchText.trim() !== "";
 
@@ -281,55 +333,16 @@ export default function Topic() {
   }, [searchText]);
 
   useEffect(() => {
+    if (toggleSearch) {
+      searchInputRef.current?.focus();
+    }
+  }, [toggleSearch]);
+
+  useEffect(() => {
     if (!slug) {
       navigate("/404");
       return;
     }
-
-    const CACHE_KEY = `topic_${slug}`;
-    const CACHE_DURATION = 1000 * 60 * 30;
-
-    const getData = async () => {
-      try {
-        const cachedData = sessionStorage.getItem(CACHE_KEY);
-
-        if (cachedData) {
-          const parsedData = JSON.parse(cachedData);
-
-          const isExpired = Date.now() > parsedData.expiry;
-
-          if (!isExpired) {
-            setContent(parsedData.data);
-            return;
-          }
-
-          sessionStorage.removeItem(CACHE_KEY);
-        }
-
-        const res = await fetch(import.meta.env.VITE_API_URL + slug + ".json");
-
-        if (!res.ok) {
-          throw new Error("Something went wrong");
-        }
-
-        const data = await res.json();
-
-        const processedData = processData(data);
-
-        sessionStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({
-            data: processedData,
-            expiry: Date.now() + CACHE_DURATION,
-          }),
-        );
-
-        setContent(processedData);
-      } catch (error) {
-        console.log(error);
-        setError(true);
-      }
-    };
 
     getData();
   }, [slug]);
@@ -380,14 +393,14 @@ export default function Topic() {
         <title>{slug ? `${slug.toUpperCase()} Notes` : "Notes App"}</title>
       </Helmet>
 
-      <Navbar />
+      <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">{slug?.toUpperCase()}</h2>
 
-      <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">{slug.toUpperCase()}</h2>
-
-      {error ? (
-        <>
-          <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">Not data found</h2>
-        </>
+      {loading ? (
+        <Loader height="h-[80vh]" />
+      ) : error ? (
+        <div className="flex items-center justify-center h-[80vh]">
+          <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">No data found</h2>
+        </div>
       ) : (
         <>
           <div className={`${toggleSearch ? "w-full" : "w-1/5"} mb-4 flex items-center gap-2 px-2 absolute top-20 left-0 z-20`}>
@@ -397,6 +410,7 @@ export default function Topic() {
                   type="text"
                   placeholder="Search questions..."
                   value={searchText}
+                  ref={searchInputRef}
                   onChange={(e) => setSearchText(e.target.value)}
                   className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-slate-900"
                 />
@@ -425,7 +439,7 @@ export default function Topic() {
             <img src={HamburgerIcon} alt="hamburger" width="20px" />
           </button>
 
-          <div className="scroll-container flex relative">
+          <div className="flex relative">
             {!isSearching && (
               <div className={`w-[90%] lg:w-[20%] h-[calc(100vh-130px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}>
                 {content?.map((data, index) => {
@@ -449,7 +463,7 @@ export default function Topic() {
                 })}
               </div>
             )}
-            <div className="w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
+            <div className="scroll-container w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
               {dataToRender?.map((data, index) => {
                 const showSubtopic = !isSearching && (index === 0 || content[index - 1]?.subTopic !== data.subTopic);
 
