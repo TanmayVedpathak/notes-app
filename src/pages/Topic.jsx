@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from "react"
 import { useNavigate, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 
+import { QuestionErrorBoundary } from "../components/QuestionErrorBoundary";
 import Loader from "../components/Loader";
 
 import CopyIcon from "../assets/copy.svg";
@@ -10,10 +11,44 @@ import HamburgerIcon from "../assets/menu.svg";
 import SearchIcon from "../assets/search.svg";
 
 const processData = (data) => {
-  return data.map((item) => ({
-    ...item,
-    searchableText: item.answer.map(extractTextFromBlock).join(" ").toLowerCase(),
-  }));
+  if (!Array.isArray(data)) return [];
+
+  return data
+    .map((item, index) => {
+      const questionId = item?.id || `index-${index}`;
+
+      try {
+        const answer = Array.isArray(item?.answer) ? item.answer : [];
+
+        return {
+          ...item,
+          answer,
+          searchableText: answer
+            .map((block) => {
+              try {
+                return extractTextFromBlock(block);
+              } catch (error) {
+                console.error("Error extracting searchable text:", {
+                  questionId,
+                  error,
+                });
+
+                return "";
+              }
+            })
+            .join(" ")
+            .toLowerCase(),
+        };
+      } catch (error) {
+        console.error("Error processing question:", {
+          questionId,
+          error,
+        });
+
+        return null;
+      }
+    })
+    .filter(Boolean);
 };
 
 const renderItem = (item, i) => {
@@ -22,7 +57,7 @@ const renderItem = (item, i) => {
   }
 
   if (item.type === "list") {
-    return <>{item.style === "ordered" ? <ol className="list-decimal pl-8">{item.items.map(renderItem)}</ol> : <ul className="list-[circle] pl-8">{item.items.map(renderItem)}</ul>}</>;
+    return <>{item.style === "ordered" ? <ol className="list-decimal pl-8">{item.items.map(renderItem)}</ol> : <ul className="list-[circle] pl-10">{item.items.map(renderItem)}</ul>}</>;
   }
 
   return <li key={i}>{item}</li>;
@@ -36,7 +71,7 @@ const renderInline = (content = []) => {
 
       case "badge":
         return (
-          <span key={i} className="rounded bg-yellow-200 px-1 text-gray-900 dark:bg-yellow-600 dark:text-white">
+          <span key={i} className="rounded bg-amber-300 px-1 text-gray-900 dark:bg-yellow-600 dark:text-white">
             {item.value}
           </span>
         );
@@ -57,7 +92,7 @@ const renderInline = (content = []) => {
 const renderHeading = (block, index) => {
   return (
     <>
-      <h4 key={index} className="text-lg text-gray-800 dark:text-gray-200">
+      <h4 key={index} className="text-lg font-bold text-gray-800 dark:text-gray-200">
         {block.content ? renderInline(block.content) : block.text}
       </h4>
     </>
@@ -75,45 +110,54 @@ const renderParagraph = (block, index) => {
 };
 
 const renderList = (block, index) => {
-  if (block.style === "ordered") {
+  const items = Array.isArray(block?.items) ? block.items : [];
+
+  if (block?.style === "ordered") {
     return (
-      <ol key={index} className="list-decimal pl-6 space-y-1 text-gray-800 dark:text-gray-200">
-        {block.items.map(renderItem)}
+      <ol key={index} className="list-decimal pl-8 space-y-1 text-gray-800 dark:text-gray-200">
+        {items.map(renderItem)}
       </ol>
     );
   }
 
   return (
-    <ul key={index} className="list-disc pl-6 space-y-1 text-gray-800 dark:text-gray-200">
-      {block.items.map(renderItem)}
+    <ul key={index} className="list-disc pl-8 space-y-1 text-gray-800 dark:text-gray-200">
+      {items.map(renderItem)}
     </ul>
   );
 };
 
 const renderTable = (block, index) => {
+  const columns = Array.isArray(block?.columns) ? block.columns : [];
+  const rows = Array.isArray(block?.data) ? block.data : [];
+
   return (
     <div key={index} className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
       <table className="min-w-full text-sm text-left">
         <thead className="bg-gray-100 dark:bg-gray-800">
           <tr>
-            {block.columns.map((col, i) => (
+            {columns.map((col, i) => (
               <th key={i} className="px-4 py-2 font-semibold text-gray-700 dark:text-gray-200">
-                {col.content ? renderInline(col.content) : col}
+                {col?.content ? renderInline(col.content) : String(col ?? "")}
               </th>
             ))}
           </tr>
         </thead>
 
         <tbody className="divide-y dark:divide-gray-700">
-          {block.data.map((row, rIndex) => (
-            <tr key={rIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-              {row.map((cell, cIndex) => (
-                <td key={cIndex} className="px-4 py-2 text-gray-700 dark:text-gray-200">
-                  {cell.content ? renderInline(cell.content) : cell}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row, rIndex) => {
+            const cells = Array.isArray(row) ? row : [];
+
+            return (
+              <tr key={rIndex} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                {cells.map((cell, cIndex) => (
+                  <td key={cIndex} className="px-4 py-2 text-gray-700 dark:text-gray-200">
+                    {cell?.content ? renderInline(cell.content) : String(cell ?? "")}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -128,49 +172,65 @@ const BLOCK_RENDERERS = {
 };
 
 const AnswerRenderer = React.memo(({ answer }) => {
+  if (!Array.isArray(answer)) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-3 text-[15px] leading-relaxed">
       {answer.map((block, index) => {
-        switch (block.type) {
-          case "h4":
-            return BLOCK_RENDERERS.h4(block, index);
+        try {
+          if (!block || !block.type) return null;
 
-          case "paragraph":
-            return BLOCK_RENDERERS.paragraph(block, index);
+          switch (block.type) {
+            case "h4":
+              return BLOCK_RENDERERS.h4(block, index);
 
-          case "bold":
-            return (
-              <p key={index} className="mt-2 font-bold text-gray-900 dark:text-white">
-                {block.content ? renderInline(block.content) : block.text}
-              </p>
-            );
+            case "paragraph":
+              return BLOCK_RENDERERS.paragraph(block, index);
 
-          case "info":
-            return (
-              <div key={index} className="flex items-center gap-3 rounded-lg border-l-4 border-blue-500 bg-blue-50 p-4 text-blue-900 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200">
-                <span className="text-lg">ℹ️</span>
-                <p className="text-sm">{block.content ? renderInline(block.content) : block.text}</p>
-              </div>
-            );
+            case "bold":
+              return (
+                <p key={index} className="mt-2 font-bold text-gray-900 dark:text-white">
+                  {block.content ? renderInline(block.content) : block.text}
+                </p>
+              );
 
-          case "warn":
-            return (
-              <div key={index} className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
-                {block.content ? renderInline(block.content) : block.text}
-              </div>
-            );
+            case "info":
+              return (
+                <div key={index} className="flex items-center gap-3 rounded-lg border-l-4 border-blue-500 bg-blue-50 p-4 text-blue-900 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200">
+                  <span className="text-lg">ℹ️</span>
+                  <p className="text-sm">{block.content ? renderInline(block.content) : block.text}</p>
+                </div>
+              );
 
-          case "list":
-            return BLOCK_RENDERERS.list(block, index);
+            case "warn":
+              return (
+                <div key={index} className="rounded-lg border border-yellow-300 bg-yellow-50 p-4 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+                  {block.content ? renderInline(block.content) : block.text}
+                </div>
+              );
 
-          case "code":
-            return <CodeBlock key={index} code={block.code} />;
+            case "list":
+              return BLOCK_RENDERERS.list(block, index);
 
-          case "table":
-            return BLOCK_RENDERERS.table(block, index);
+            case "code":
+              return <CodeBlock key={index} code={block.code || ""} />;
 
-          default:
-            return block.type;
+            case "table":
+              return BLOCK_RENDERERS.table(block, index);
+
+            default:
+              return null;
+          }
+        } catch (error) {
+          console.error("Error rendering answer block:", {
+            blockIndex: index,
+            block,
+            error,
+          });
+
+          return null;
         }
       })}
     </div>
@@ -248,7 +308,7 @@ const CodeBlock = ({ code }) => {
   );
 };
 
-export default function Topic() {
+export default function Topic({ topics }) {
   const { slug } = useParams();
   const navigate = useNavigate();
 
@@ -264,8 +324,12 @@ export default function Topic() {
   const searchInputRef = useRef(null);
   const sectionRefs = useRef({});
 
+  const SCROLL_KEY = `topic_scroll_${slug}`;
+  const SUB_SCROLL_KEY = `sub_scroll_${slug}`;
   const CACHE_KEY = `topic_${slug}`;
   const CACHE_DURATION = Number(import.meta.env.VITE_CACHE_TIME);
+
+  const isSearching = debouncedSearchText.trim() !== "";
 
   const getData = async () => {
     try {
@@ -314,12 +378,76 @@ export default function Topic() {
     }
   };
 
-  const isSearching = debouncedSearchText.trim() !== "";
+  const QuestionItem = ({ data, index, isSearching, content, sectionRefs }) => {
+    const showSubtopic = !isSearching && data?.subTopic && (index === 0 || content[index - 1]?.subTopic !== data?.subTopic);
+
+    return (
+      <React.Fragment>
+        {showSubtopic && (
+          <h2
+            ref={(el) => {
+              if (el && data?.subTopic) {
+                sectionRefs.current[data.subTopic] = el;
+              }
+            }}
+            id={data?.subTopic}
+            className="my-8 border-l-4 border-indigo-500 pl-4 text-2xl font-bold text-gray-900 dark:text-white"
+          >
+            {data?.subTopic}
+          </h2>
+        )}
+
+        <div className="rounded-xl border border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900">
+          <div className="mb-3 border-b pb-2">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+              <span className="mr-2 text-indigo-600 dark:text-indigo-400">Q.{index + 1}</span>
+              {data?.question}
+            </h3>
+          </div>
+
+          <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer :</p>
+
+          <AnswerRenderer answer={data?.answer} />
+        </div>
+      </React.Fragment>
+    );
+  };
+
+  const renderData = (dataToRender) => {
+    return (
+      <>
+        {Array.isArray(dataToRender) &&
+          dataToRender.map((data, index) => {
+            const questionId = data?.id || `index-${index}`;
+
+            try {
+              if (!data) return null;
+
+              return <QuestionItem key={questionId} data={data} index={index} isSearching={isSearching} content={content} sectionRefs={sectionRefs} />;
+            } catch (error) {
+              console.error("Error rendering question item:", {
+                questionId,
+                error,
+              });
+
+              return null;
+            }
+          })}
+      </>
+    );
+  };
 
   const dataToRender = useMemo(() => {
     if (!debouncedSearchText.trim()) return content;
+
     const query = debouncedSearchText.toLowerCase();
-    return content.filter((item) => item.question.toLowerCase().includes(query) || item.searchableText.includes(query));
+
+    return content.filter((item) => {
+      const question = item?.question || "";
+      const searchableText = item?.searchableText || "";
+
+      return question.toLowerCase().includes(query) || searchableText.includes(query);
+    });
   }, [content, debouncedSearchText]);
 
   const handleClearSearch = useCallback(() => {
@@ -348,17 +476,34 @@ export default function Topic() {
   }, [slug]);
 
   useEffect(() => {
-    if (!content?.length) return;
+    if (isSearching) return;
 
     const container = document.querySelector(".scroll-container");
-    const headings = container?.querySelectorAll("h2[id]");
+    if (!container) return;
 
-    if (!container || !headings.length) return;
+    const subContainer = document.querySelector(".sub-scroll-container");
+    if (!subContainer) return;
+
+    const getHeadings = () => Array.from(container.querySelectorAll("h2[id]"));
+
+    const savedScrollTop = sessionStorage.getItem(SCROLL_KEY);
+    const savedSubScrollTop = sessionStorage.getItem(SUB_SCROLL_KEY);
+
+    if (savedScrollTop !== null || savedSubScrollTop !== null) {
+      requestAnimationFrame(() => {
+        container.scrollTop = Number(savedScrollTop);
+        subContainer.scrollTop = Number(savedSubScrollTop);
+      });
+    }
 
     const handleScroll = () => {
+      const headings = getHeadings();
+
+      if (!headings.length) return;
+
       const containerTop = container.getBoundingClientRect().top;
 
-      let active = null;
+      let active = headings[0];
 
       headings.forEach((heading) => {
         const rect = heading.getBoundingClientRect();
@@ -368,24 +513,24 @@ export default function Topic() {
         }
       });
 
-      if (active) {
+      sessionStorage.setItem(SCROLL_KEY, String(container.scrollTop));
+      sessionStorage.setItem(SUB_SCROLL_KEY, String(subContainer.scrollTop));
+
+      if (active?.id) {
         setActiveSubtopic((prev) => {
-          if (prev !== active.id) {
-            return active.id;
-          }
-          return prev;
+          return prev !== active.id ? active.id : prev;
         });
       }
     };
 
     container.addEventListener("scroll", handleScroll);
 
-    handleScroll();
+    requestAnimationFrame(handleScroll);
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [content]);
+  }, [dataToRender, isSearching, SCROLL_KEY]);
 
   return (
     <>
@@ -393,7 +538,16 @@ export default function Topic() {
         <title>{slug ? `${slug.toUpperCase()} Notes` : "Notes App"}</title>
       </Helmet>
 
-      <h2 className="text-3xl leading-loose font-bold text-gray-900 dark:text-white text-center">{slug?.toUpperCase()}</h2>
+      <select className="topic-select" value={slug} onChange={(e) => navigate(`/topic/${e.target.value}`)} aria-label="Select topic">
+        <option value="" disabled>
+          Select Topic
+        </option>
+        {topics.map((topic) => (
+          <option key={topic.slug} value={topic.slug}>
+            {topic.title}
+          </option>
+        ))}
+      </select>
 
       {loading ? (
         <Loader height="h-[80vh]" />
@@ -441,9 +595,11 @@ export default function Topic() {
 
           <div className="flex relative">
             {!isSearching && (
-              <div className={`w-[90%] lg:w-[20%] h-[calc(100vh-130px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}>
+              <div
+                className={`sub-scroll-container w-[90%] lg:w-[20%] h-[calc(100vh-160px)] overflow-auto absolute top-0 ${toggleBar ? "left-0" : "-left-full"} lg:sticky border-r border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900 transition duration-300 ease-in-out z-20`}
+              >
                 {content?.map((data, index) => {
-                  const showSubtopic = index === 0 || content[index - 1].subTopic !== data.subTopic;
+                  const showSubtopic = index === 0 || content[index - 1]?.subTopic !== data?.subTopic;
 
                   if (!showSubtopic) return null;
 
@@ -452,10 +608,14 @@ export default function Topic() {
                   return (
                     <p
                       key={data.subTopic}
-                      onClick={() => document.getElementById(data.subTopic)?.scrollIntoView({ behavior: "smooth" })}
+                      onClick={() => {
+                        if (!data?.subTopic) return;
+
+                        document.getElementById(data.subTopic)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
                       className={`w-[90%] my-2 cursor-pointer rounded-md px-3 py-2 text-sm transition
-                  ${isActive ? "bg-indigo-100 text-indigo-700 font-semibold dark:bg-indigo-900 dark:text-indigo-300" : "text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-slate-800"}
-                `}
+                        ${isActive ? "bg-indigo-100 text-indigo-700 font-semibold dark:bg-indigo-900 dark:text-indigo-300" : "text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-slate-800"}
+                      `}
                     >
                       {data.subTopic}
                     </p>
@@ -463,40 +623,7 @@ export default function Topic() {
                 })}
               </div>
             )}
-            <div className="scroll-container w-full lg:w-[80%] h-[calc(100vh-130px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">
-              {dataToRender?.map((data, index) => {
-                const showSubtopic = !isSearching && (index === 0 || content[index - 1]?.subTopic !== data.subTopic);
-
-                return (
-                  <React.Fragment key={data.id}>
-                    {showSubtopic && (
-                      <h2
-                        ref={(el) => {
-                          if (el) sectionRefs.current[data.subTopic] = el;
-                        }}
-                        id={data.subTopic}
-                        className="my-8 border-l-4 border-indigo-500 pl-4 text-2xl font-bold text-gray-900 dark:text-white"
-                      >
-                        {data.subTopic}
-                      </h2>
-                    )}
-
-                    <div className="rounded-xl border border-gray-200 bg-gray-100 p-5 shadow-sm dark:border-gray-700 dark:bg-slate-900">
-                      <div className="mb-3 border-b pb-2">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                          <span className="mr-2 text-indigo-600 dark:text-indigo-400">Q.{index + 1}</span>
-                          {data?.question}
-                        </h3>
-                      </div>
-
-                      <p className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer</p>
-
-                      <AnswerRenderer answer={data?.answer} />
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
+            <div className="scroll-container w-full lg:w-[80%] h-[calc(100vh-160px)] overflow-auto flex flex-col gap-6 px-2 mx-auto">{renderData(dataToRender)}</div>
           </div>
         </>
       )}
