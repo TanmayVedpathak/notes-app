@@ -7,13 +7,13 @@ import "server-only";
 const DEFAULT_REVALIDATE_SECONDS = 60 * 60;
 
 function getRevalidateSeconds(): number {
-  const configuredValue = Number(process.env.NEXT_PUBLIC_TOPIC_REVALIDATE_SECONDS);
+  const configuredValue = Number(process.env.TOPIC_REVALIDATE_SECONDS);
 
   return Number.isFinite(configuredValue) && configuredValue >= 0 ? configuredValue : DEFAULT_REVALIDATE_SECONDS;
 }
 
 function getApiBaseUrl(): string {
-  const baseUrl = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL;
+  const baseUrl = process.env.API_URL ?? process.env.API_URL;
 
   if (!baseUrl) {
     throw new Error("Missing API_URL. Add API_URL=https://your-domain/path/ to .env.local.");

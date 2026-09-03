@@ -26,9 +26,48 @@ A responsive interview-preparation notes app built with Next.js. The home page l
 - Node.js 20.9 or newer
 - npm
 - A static JSON endpoint containing the topic catalog and topic files described below
-- The local `eslint-config-custom` package at `../../eslint-config-custom`, relative to this project
 
-The last requirement comes from the current `file:../../eslint-config-custom` development dependency. The directory must exist before installing dependencies from a fresh checkout.
+### Optional: Custom ESLint Configuration
+
+This project can be used with your own ESLint configuration.
+
+If you want to use the custom [`eslint-config-custom`](https://github.com/TanmayVedpathak/eslint-config-custom) configuration used during development, clone it separately:
+
+```bash
+git clone https://github.com/TanmayVedpathak/eslint-config-custom.git
+```
+
+Then update the corresponding dependency path in `package.json` so that it points to the location where you cloned the ESLint configuration.
+
+For example:
+
+```json
+{
+  "devDependencies": {
+    "eslint-config-custom": "file:../eslint-config-custom"
+  }
+}
+```
+
+The relative path depends on your local directory structure.
+
+For example:
+
+```text
+projects/
+├── eslint-config-custom/
+└── notes-app-next/
+```
+
+In this structure, the dependency would be:
+
+```json
+"eslint-config-custom": "file:../eslint-config-custom"
+```
+
+If your directory structure is different, update the path accordingly.
+
+If you do not want to use the provided custom ESLint configuration, remove the `eslint-config-custom` file dependency from `package.json` and configure ESLint according to your own requirements.
 
 ## Installation
 
@@ -39,9 +78,23 @@ The last requirement comes from the current `file:../../eslint-config-custom` de
    cd notes-app-next
    ```
 
-2. Make sure the shared ESLint package is available at `../../eslint-config-custom`.
+2. Optional: Clone the custom ESLint configuration if you want to use it.
 
-3. Install the locked dependencies.
+   ```bash
+   git clone https://github.com/TanmayVedpathak/eslint-config-custom.git <preferred-location>
+   ```
+
+   After cloning it, update the `file:` path for `eslint-config-custom` in `package.json` according to its location relative to the current project.
+
+   Skip this step if you are using your own ESLint configuration.
+
+3. Install the project dependencies.
+
+   ```bash
+   npm install
+   ```
+
+   If you are using the provided lock file and all local `file:` dependencies are correctly configured, you can instead use:
 
    ```bash
    npm ci
@@ -50,8 +103,8 @@ The last requirement comes from the current `file:../../eslint-config-custom` de
 4. Create `.env.local` in the project root.
 
    ```dotenv
-   NEXT_PUBLIC_API_URL
-   NEXT_PUBLIC_TOPIC_REVALIDATE_SECONDS
+   API_URL=
+   TOPIC_REVALIDATE_SECONDS=
    ```
 
 5. Start the development server.
@@ -60,19 +113,18 @@ The last requirement comes from the current `file:../../eslint-config-custom` de
    npm run dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000).
+6. Open http://localhost:3000.
 
 ## Environment Variables
 
-| Variable                               | Required | Default               | Purpose                                                                                                                   |
-| -------------------------------------- | -------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL`                  | Yes      | None                  | Public base URL used to fetch JSON data and render topic icons. Include a trailing `/` so icon URLs are formed correctly. |
-| `API_URL`                              | No       | `NEXT_PUBLIC_API_URL` | Server-only override for the JSON API base URL. Topic icons still use `NEXT_PUBLIC_API_URL`.                              |
-| `NEXT_PUBLIC_TOPIC_REVALIDATE_SECONDS` | No       | `3600`                | Cache revalidation interval in seconds. Use `0` to revalidate on every request.                                           |
+| Variable                   | Required | Default | Purpose                                                                          |
+| -------------------------- | -------- | ------- | -------------------------------------------------------------------------------- |
+| `API_URL`                  | No       | None    | Server-only override for the JSON API base URL. Topic icons still use `API_URL`. |
+| `TOPIC_REVALIDATE_SECONDS` | No       | `3600`  | Cache revalidation interval in seconds. Use `0` to revalidate on every request.  |
 
 Environment files are ignored by Git. Restart the development server after changing them. Values prefixed with `NEXT_PUBLIC_` are included in the browser bundle at build time and must not contain secrets.
 
-Remote topic images are currently restricted to `NEXT_PUBLIC_API_URL/img/**` in `next.config.ts`. Add a matching `images.remotePatterns` entry before using an API that serves icons from another host.
+Remote topic images are currently restricted to `API_URL/img/**` in `next.config.ts`. Add a matching `images.remotePatterns` entry before using an API that serves icons from another host.
 
 ## API Data Format
 
@@ -136,7 +188,7 @@ npm run start
 2. Next.js generates a `/topic/[slug]` route for each safe slug in the catalog.
 3. A topic route fetches `<slug>.json`, validates and normalizes its answer blocks, and renders the questions.
 4. Search runs in the browser against normalized question and answer text.
-5. API responses are cached and revalidated using `NEXT_PUBLIC_TOPIC_REVALIDATE_SECONDS`.
+5. API responses are cached and revalidated using `TOPIC_REVALIDATE_SECONDS`.
 
 The app returns a not-found page when a topic file responds with HTTP 404. Other API failures are handled by the application error page.
 
