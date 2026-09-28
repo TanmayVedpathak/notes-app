@@ -127,6 +127,13 @@ const AnswerRenderer = memo(function AnswerRenderer({ answer }: AnswerRendererPr
               </h4>
             );
 
+          case "h5":
+            return (
+              <h5 key={index} className="text-base font-bold text-gray-800 dark:text-gray-200">
+                {renderRichText(block)}
+              </h5>
+            );
+
           case "paragraph":
             return (
               <p key={index} className="text-gray-800 dark:text-gray-200">
@@ -143,7 +150,7 @@ const AnswerRenderer = memo(function AnswerRenderer({ answer }: AnswerRendererPr
 
           case "info":
             return (
-              <div key={index} className="flex items-start gap-3 rounded-lg border-l-4 border-blue-500 bg-blue-50 p-4 text-blue-900 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200">
+              <div key={index} className="flex items-center gap-3 rounded-lg border-l-4 border-blue-500 bg-blue-50 p-4 text-blue-900 dark:border-blue-400 dark:bg-blue-950 dark:text-blue-200">
                 <span className="text-lg" aria-hidden="true">
                   ℹ️
                 </span>

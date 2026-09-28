@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 import type { TopicOption, TopicQuestion } from "@/types";
 
 import { processTopicData } from "./process-topic-data";
@@ -5,6 +8,7 @@ import { processTopicData } from "./process-topic-data";
 import "server-only";
 
 const DEFAULT_REVALIDATE_SECONDS = 60 * 60;
+const DATA_DIR = path.join(process.cwd(), "data");
 
 function getRevalidateSeconds(): number {
   const configuredValue = Number(process.env.TOPIC_REVALIDATE_SECONDS);
@@ -13,7 +17,7 @@ function getRevalidateSeconds(): number {
 }
 
 function getApiBaseUrl(): string {
-  const baseUrl = process.env.API_URL ?? process.env.API_URL;
+  const baseUrl = process.env.API_URL;
 
   if (!baseUrl) {
     throw new Error("Missing API_URL. Add API_URL=https://your-domain/path/ to .env.local.");
@@ -26,7 +30,7 @@ function createJsonUrl(fileName: string): string {
   return new URL(`${encodeURIComponent(fileName)}.json`, getApiBaseUrl()).toString();
 }
 
-async function getJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
+async function getApiJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
   const response = await fetch(createJsonUrl(fileName), {
     next: {
       revalidate: getRevalidateSeconds(),
@@ -41,11 +45,39 @@ async function getJsonFile(fileName: string): Promise<TopicOption[] | TopicQuest
     throw new Error(`Unable to load ${fileName}.json. API returned ${response.status}.`);
   }
 
-  return await response.json();
+  return response.json();
+}
+
+async function getLocalJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
+  const filePath = path.join(DATA_DIR, `${fileName}.json`);
+
+  try {
+    const fileContent = await fs.readFile(filePath, "utf-8");
+
+    return JSON.parse(fileContent) as TopicOption[] | TopicQuestion[];
+  } catch (error: unknown) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+
+    throw new Error(`Unable to load local file ${fileName}.json.`);
+  }
+}
+
+async function getJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
+  if (process.env.DATA_SOURCE === "local") {
+    return getLocalJsonFile(fileName);
+  }
+
+  return getApiJsonFile(fileName);
 }
 
 export async function getTopics(): Promise<TopicOption[]> {
   const data = (await getJsonFile("topic")) as TopicOption[];
+
+  if (!data) {
+    return [];
+  }
 
   return data;
 }

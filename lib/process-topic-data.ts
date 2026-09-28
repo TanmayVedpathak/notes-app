@@ -93,6 +93,7 @@ function normalizeAnswerBlock(value: unknown): AnswerBlock | null {
 
   switch (value.type) {
     case "h4":
+    case "h5":
     case "paragraph":
     case "bold":
     case "info":
@@ -164,6 +165,7 @@ function tableCellText(cell: TableCell): string {
 export function extractTextFromBlock(block: AnswerBlock): string {
   switch (block.type) {
     case "h4":
+    case "h5":
     case "paragraph":
     case "bold":
     case "info":

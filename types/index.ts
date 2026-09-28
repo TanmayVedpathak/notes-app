@@ -13,7 +13,7 @@ export type RichTextFields = {
 };
 
 export type HeadingAnswerBlock = RichTextFields & {
-  type: "h4";
+  type: "h4" | "h5";
 };
 
 export type ParagraphAnswerBlock = RichTextFields & {
