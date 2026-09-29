@@ -99,7 +99,7 @@ export function useTopicScroll({ slug, isSearching, questionCount, contentRef, s
       setActiveSubtopic(subtopic);
       contentContainer.scrollTo({
         top: targetScrollTop,
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
       });
     },
     [contentRef],

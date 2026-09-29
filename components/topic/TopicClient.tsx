@@ -5,6 +5,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTopicScroll } from "@/hooks/use-topic-scroll";
 
+import { formatSlugTitle } from "@/lib/utils";
+
 import type { TopicOption, TopicQuestion } from "@/types";
 
 import QuestionList from "./QuestionList";
@@ -21,7 +23,6 @@ type TopicClientProps = {
 
 export default function TopicClient({ slug, topics, questions }: TopicClientProps) {
   const [searchText, setSearchText] = useState("");
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -44,27 +45,21 @@ export default function TopicClient({ slug, topics, questions }: TopicClientProp
     sidebarRef,
   });
 
-  const handleClearSearch = useCallback(() => {
-    setSearchText("");
-    setIsSearchOpen(false);
-  }, []);
-
   const handleSelectSubtopic = useCallback(
     (subtopic: string) => {
       scrollToSubtopic(subtopic);
       setIsSidebarOpen(false);
+      contentRef.current?.focus({ preventScroll: true });
     },
     [scrollToSubtopic],
   );
 
   return (
-    <section className="relative py-2">
-      <div className="mb-4 flex items-center gap-3 px-2">
+    <section className="reader-shell" aria-label="Notes reader">
+      <div className="reader-toolbar">
         <TopicSelector currentSlug={slug} topics={topics} />
 
-        <div className="ml-auto flex min-w-0 flex-1 justify-end">
-          <TopicSearch value={searchText} isOpen={isSearchOpen} onChange={setSearchText} onOpen={() => setIsSearchOpen(true)} onClear={handleClearSearch} />
-        </div>
+        <TopicSearch value={searchText} onChange={setSearchText} />
 
         {!isSearching ? (
           <button
@@ -73,17 +68,18 @@ export default function TopicClient({ slug, topics, questions }: TopicClientProp
             aria-label="Toggle subtopic navigation"
             aria-expanded={isSidebarOpen}
             aria-controls="subtopic-sidebar"
-            className="cursor-pointer rounded bg-gray-700 p-2 text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 lg:hidden"
+            className="reader-button sections-toggle"
           >
             <MenuIcon className="size-5" />
+            Sections
           </button>
         ) : null}
       </div>
 
-      <div className="relative flex">
+      <div className="reader-layout">
         {!isSearching ? <SubtopicSidebar questions={questions} activeSubtopic={activeSubtopic} isOpen={isSidebarOpen} containerRef={sidebarRef} onSelect={handleSelectSubtopic} /> : null}
 
-        <QuestionList questions={visibleQuestions} isSearching={isSearching} containerRef={contentRef} />
+        <QuestionList questions={visibleQuestions} isSearching={isSearching} containerRef={contentRef} title={topics.find((topic) => topic.slug === slug)?.title ?? formatSlugTitle(slug)} />
       </div>
     </section>
   );

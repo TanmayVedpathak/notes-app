@@ -38,12 +38,13 @@ export default function CodeBlock({ code }: CodeBlockProps) {
   };
 
   return (
-    <div className="relative rounded-lg border border-gray-200 bg-gray-900 px-3 py-4 text-sm dark:border-gray-700">
-      <button type="button" onClick={handleCopy} aria-label={copied ? "Code copied" : "Copy code"} title={copied ? "Copied" : "Copy code"} className="absolute right-2 top-3 cursor-pointer rounded bg-gray-700 p-1.5 text-white hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+    <div className="code-block">
+      <button type="button" onClick={handleCopy} aria-label={copied ? "Code copied" : "Copy code"} title={copied ? "Copied" : "Copy code"} className="code-copy">
         {copied ? <CheckIcon className="size-5" /> : <CopyIcon className="size-5" />}
       </button>
 
-      <pre className="mr-9 overflow-x-auto text-gray-100">
+      <div className="code-label">Code example</div>
+      <pre tabIndex={0} aria-label="Code example" className="code-content">
         <code>{code}</code>
       </pre>
 

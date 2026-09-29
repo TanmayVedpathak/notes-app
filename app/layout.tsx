@@ -44,10 +44,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <header className="h-[10vh] bg-red-700">
+          <header className="app-header">
             <Navbar />
           </header>
-          <main className="h-[90vh]">{children}</main>
+          <main className="app-main">{children}</main>
         </ThemeProvider>
       </body>
     </html>

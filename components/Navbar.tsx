@@ -5,10 +5,10 @@ import ThemeToggle from "./ThemeToggle";
 const Navbar = () => {
   return (
     <>
-      <nav className="border-b bg-white dark:bg-gray-900 dark:border-gray-800 h-full flex flex-col justify-center">
-        <div className="mx-auto max-w-7xl w-full flex items-center justify-between px-6 ">
-          <Link href="/" className="text-xl font-bold text-gray-900 dark:text-white">
-            📘 Notes App
+      <nav className="app-nav" aria-label="Main navigation">
+        <div className="nav-inner">
+          <Link href="/" className="app-brand">
+            Notes App <span className="brand-caption">A little learning, every day.</span>
           </Link>
 
           <ThemeToggle />

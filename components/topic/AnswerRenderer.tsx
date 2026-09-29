@@ -18,14 +18,14 @@ function renderInline(content: InlineContent[] = []): ReactNode[] {
 
       case "badge":
         return (
-          <span key={key} className="rounded bg-amber-300 px-1 text-gray-900 dark:bg-yellow-600 dark:text-white">
+          <span key={key} className="inline-badge">
             {item.value}
           </span>
         );
 
       case "code":
         return (
-          <code key={key} className="rounded bg-gray-200 px-1 font-mono text-sm dark:bg-gray-700">
+          <code key={key} className="inline-code">
             {item.value}
           </code>
         );
@@ -117,7 +117,7 @@ function renderTable(block: TableAnswerBlock, key: number): ReactNode {
 
 const AnswerRenderer = memo(function AnswerRenderer({ answer }: AnswerRendererProps) {
   return (
-    <div className="flex flex-col gap-3 text-[15px] leading-relaxed">
+    <div className="answer-content">
       {answer.map((block, index) => {
         switch (block.type) {
           case "h4":
@@ -168,7 +168,7 @@ const AnswerRenderer = memo(function AnswerRenderer({ answer }: AnswerRendererPr
           case "badge":
             return (
               <p key={index}>
-                <span className="rounded bg-amber-300 px-1 text-gray-900 dark:bg-yellow-600 dark:text-white">{block.value ?? renderRichText(block)}</span>
+                <span className="inline-badge">{block.value ?? renderRichText(block)}</span>
               </p>
             );
 
