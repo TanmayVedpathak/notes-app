@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type { TopicOption, TopicQuestion } from "@/types";
 
+import { getGithubJsonFile } from "./github";
 import { processTopicData } from "./process-topic-data";
 
 import "server-only";
@@ -10,76 +11,67 @@ import "server-only";
 const DEFAULT_REVALIDATE_SECONDS = 60 * 60;
 const DATA_DIR = path.join(process.cwd(), "data");
 
-function getRevalidateSeconds(): number {
+type JsonData = TopicOption[] | TopicQuestion[];
+
+export function getRevalidateSeconds(): number {
     const configuredValue = Number(process.env.TOPIC_REVALIDATE_SECONDS);
 
     return Number.isFinite(configuredValue) && configuredValue >= 0 ? configuredValue : DEFAULT_REVALIDATE_SECONDS;
 }
 
-function getApiBaseUrl(): string {
-    const baseUrl = process.env.API_URL;
-
-    if (!baseUrl) {
-        throw new Error("Missing API_URL. Add API_URL=https://your-domain/path/ to .env.local.");
-    }
-
-    return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-}
-
-function createJsonUrl(fileName: string): string {
-    return new URL(`json/${encodeURIComponent(fileName)}.json`, getApiBaseUrl()).toString();
-}
-
-async function getApiJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
-    const response = await fetch(createJsonUrl(fileName), {
-        next: {
-            revalidate: getRevalidateSeconds(),
-        },
-    });
-
-    if (response.status === 404) {
-        return null;
-    }
-
-    if (!response.ok) {
-        throw new Error(`Unable to load ${fileName}.json. API returned ${response.status}.`);
-    }
-
-    return response.json();
-}
-
-async function getLocalJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
-    const filePath = path.join(DATA_DIR, `/json/${fileName}.json`);
+async function getLocalJsonFile(fileName: string): Promise<JsonData | null> {
+    const filePath = path.join(DATA_DIR, "json", `${fileName}.json`);
 
     try {
         const fileContent = await fs.readFile(filePath, "utf-8");
 
-        return JSON.parse(fileContent) as TopicOption[] | TopicQuestion[];
+        return JSON.parse(fileContent) as JsonData;
     } catch (error: unknown) {
         if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
             return null;
         }
 
-        throw new Error(`Unable to load local file ${fileName}.json.`);
+        throw new Error(`Unable to load local file ${fileName}.json.`, { cause: error });
     }
 }
 
-async function getJsonFile(fileName: string): Promise<TopicOption[] | TopicQuestion[] | null> {
-    if (process.env.DATA_SOURCE === "local") {
-        return getLocalJsonFile(fileName);
-    }
+async function getJsonFile(fileName: string): Promise<JsonData | null> {
+    const source = process.env.DATA_SOURCE;
 
-    return getApiJsonFile(fileName);
+    try {
+        let data: JsonData | null;
+
+        switch (source) {
+            case "local":
+                data = await getLocalJsonFile(fileName);
+                break;
+            case "github":
+                data = await getGithubJsonFile<JsonData>(fileName);
+                break;
+            default:
+                throw new Error(`Invalid DATA_SOURCE: ${source}`);
+        }
+
+        if (data === null) {
+            console.warn("[getJsonFile] JSON file not found", { source, fileName });
+        }
+
+        return data;
+    } catch (error: unknown) {
+        // Log once here for all providers; preserve the original error and stack.
+        console.error("[getJsonFile] Failed to load JSON data", { source, fileName }, error);
+        throw error;
+    }
 }
 
 export async function getTopics(): Promise<TopicOption[]> {
-    const data = (await getJsonFile("topic")) as TopicOption[];
+    const data = await getJsonFile("topic");
 
-    if (!data) {
+    if (data === null) {
         return [];
     }
 
-    return data;
+    return data as TopicOption[];
 }
 
 export async function getTopicQuestions(slug: string): Promise<TopicQuestion[] | null> {
@@ -89,5 +81,5 @@ export async function getTopicQuestions(slug: string): Promise<TopicQuestion[] |
         return null;
     }
 
-    return processTopicData(data);
+    return processTopicData(data, slug);
 }
