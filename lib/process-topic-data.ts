@@ -114,6 +114,7 @@ function normalizeAnswerBlock(value: unknown): AnswerBlock | null {
             return {
                 type: "code",
                 code: typeof value.code === "string" ? value.code : "",
+                language: typeof value.language === "string" ? value.language : "",
             };
 
         case "list":
