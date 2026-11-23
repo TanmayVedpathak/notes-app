@@ -1,5 +1,3 @@
-import { getRevalidateSeconds } from "./api";
-
 import "server-only";
 
 function createGithubJsonUrl(fileName: string): string {
@@ -43,7 +41,7 @@ export async function getGithubJsonFile<T>(fileName: string): Promise<T | null> 
             "X-GitHub-Api-Version": "2022-11-28",
         },
         next: {
-            revalidate: getRevalidateSeconds(),
+            revalidate: false,
             tags: ["github-json", `topic-${fileName}`],
         },
     });

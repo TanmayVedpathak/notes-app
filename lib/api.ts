@@ -13,12 +13,6 @@ const DATA_DIR = path.join(process.cwd(), "data");
 
 type JsonData = TopicOption[] | TopicQuestion[];
 
-export function getRevalidateSeconds(): number {
-    const configuredValue = Number(process.env.TOPIC_REVALIDATE_SECONDS);
-
-    return Number.isFinite(configuredValue) && configuredValue >= 0 ? configuredValue : DEFAULT_REVALIDATE_SECONDS;
-}
-
 async function getLocalJsonFile(fileName: string): Promise<JsonData | null> {
     const filePath = path.join(DATA_DIR, "json", `${fileName}.json`);
 
