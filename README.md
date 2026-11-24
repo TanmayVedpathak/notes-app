@@ -11,7 +11,7 @@ A responsive interview-preparation app built with Next.js. Load topic catalogs a
 - Rich answers with headings, paragraphs, code, nested lists, tables, badges, and callouts
 - Remembered scroll position for each topic
 - Light and dark themes
-- Cached GitHub data with configurable revalidation
+- Cached GitHub data with signed webhook-based invalidation
 - Contextual error logs and warnings for missing files and invalid content
 
 ## Tech Stack
@@ -23,28 +23,28 @@ Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, and ESLint.
 1. Install Node.js 20.9 or newer and npm, then clone this repository and enter its directory.
 2. Configure the local ESLint dependency before installing packages. The project imports `eslint-config-custom/next` in `eslint.config.mjs`, with `"eslint-config-custom": "file:../../eslint-config-custom"` in `package.json`.
 
-   Clone the configuration and adjust the `file:` path to match its location relative to this project:
+    Clone the configuration and adjust the `file:` path to match its location relative to this project:
 
-   ```bash
-   git clone https://github.com/TanmayVedpathak/eslint-config-custom.git <preferred-location>
-   ```
+    ```bash
+    git clone https://github.com/TanmayVedpathak/eslint-config-custom.git <preferred-location>
+    ```
 
-   For a sibling checkout, use `"eslint-config-custom": "file:../eslint-config-custom"`. To use another configuration, update both the dependency and `eslint.config.mjs`.
+    For a sibling checkout, use `"eslint-config-custom": "file:../eslint-config-custom"`. To use another configuration, update both the dependency and `eslint.config.mjs`.
 
 3. Install dependencies:
 
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 
-   Use `npm ci` instead when the lock file matches `package.json` and the local dependency is available at its configured path.
+    Use `npm ci` instead when the lock file matches `package.json` and the local dependency is available at its configured path.
 
 4. Create `.env.local` in the project root using one of the configurations below. You can also use `.env`; `.env.local` takes precedence for matching variables.
 5. Start the development server:
 
-   ```bash
-   npm run dev
-   ```
+    ```bash
+    npm run dev
+    ```
 
 6. Open http://localhost:3000.
 
@@ -68,7 +68,7 @@ data/
     react.json
 ```
 
-`topic.json` contains the catalog, and each `<slug>.json` contains that topic's questions. The `data/` directory is ignored by Git, so provision it separately in environments using local data. Local files are read through the filesystem; `TOPIC_REVALIDATE_SECONDS` only configures GitHub fetch caching.
+`topic.json` contains the catalog, and each `<slug>.json` contains that topic's questions. The `data/` directory is ignored by Git, so provision it separately in environments using local data. Local files are read directly through the filesystem and are not affected by the GitHub cache or webhook.
 
 ### GitHub repository
 
@@ -79,26 +79,34 @@ GITHUB_REPO=your-repository
 GITHUB_BRANCH=main
 GITHUB_DATA_PATH=json
 GITHUB_TOKEN=your-token
-TOPIC_REVALIDATE_SECONDS=3600
+GITHUB_WEBHOOK_SECRET=your-random-webhook-secret
 ```
 
 Store `topic.json` and the topic files under `GITHUB_DATA_PATH` in the selected repository and branch. Set `GITHUB_DATA_PATH=` to use the repository root. The server requests raw JSON through GitHub's repository contents API, with the token in the authorization header. The implementation requires a token even for public repositories; it must have read access to the repository contents.
 
+GitHub responses are cached without a time limit. Configure a repository webhook so pushes invalidate the cache immediately:
+
+1. Open the GitHub repository's **Settings → Webhooks → Add webhook** page.
+2. Set the payload URL to `https://<your-domain>/api/webhooks/github`.
+3. Set the content type to `application/json`.
+4. Enter the same random value used for `GITHUB_WEBHOOK_SECRET`.
+5. Select **Just the push event** and activate the webhook.
+
+The endpoint verifies GitHub's `X-Hub-Signature-256` HMAC signature before parsing the payload. It only invalidates the `github-json` cache tag when the push belongs to the configured repository and branch. Other event types, repositories, branches, and branch-deletion pushes are safely ignored.
+
 ## Environment Variables
 
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `DATA_SOURCE` | Yes | None | Selects `local` or `github`. |
-| `GITHUB_OWNER` | For GitHub | None | Repository owner or organization. |
-| `GITHUB_REPO` | For GitHub | None | Repository name. |
-| `GITHUB_TOKEN` | For GitHub | None | Server-only token with repository contents read access. |
-| `GITHUB_BRANCH` | No | `main` | GitHub branch or ref to read. |
-| `GITHUB_DATA_PATH` | No | `json` | Directory containing JSON files; an empty value selects the repository root. |
-| `TOPIC_REVALIDATE_SECONDS` | No | `3600` | GitHub fetch revalidation interval in seconds; `0` disables fetch caching. |
+| Variable                | Required                 | Default | Purpose                                                                      |
+| ----------------------- | ------------------------ | ------- | ---------------------------------------------------------------------------- |
+| `DATA_SOURCE`           | Yes                      | None    | Selects `local` or `github`.                                                 |
+| `GITHUB_OWNER`          | For GitHub               | None    | Repository owner or organization.                                            |
+| `GITHUB_REPO`           | For GitHub               | None    | Repository name.                                                             |
+| `GITHUB_TOKEN`          | For GitHub               | None    | Server-only token with repository contents read access.                      |
+| `GITHUB_BRANCH`         | No                       | `main`  | GitHub branch or ref to read.                                                |
+| `GITHUB_DATA_PATH`      | No                       | `json`  | Directory containing JSON files; an empty value selects the repository root. |
+| `GITHUB_WEBHOOK_SECRET` | For webhook invalidation | None    | Shared secret used to verify signed GitHub webhook requests.                 |
 
-The revalidation setting must convert to a finite, nonnegative number. Invalid or negative values fall back to `3600`; an explicitly empty value converts to `0`.
-
-Environment files are ignored by Git. Restart the development server after changing them, and configure the required variables in production and build environments. Keep `GITHUB_TOKEN` server-only; do not give it a `NEXT_PUBLIC_` prefix.
+Environment files are ignored by Git. Restart the development server after changing them, and configure the required variables in production and build environments. Keep `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` server-only; do not give either variable a `NEXT_PUBLIC_` prefix.
 
 ## JSON Data Format
 
@@ -108,12 +116,12 @@ Example `topic.json`:
 
 ```json
 [
-  {
-    "title": "JavaScript",
-    "slug": "javascript",
-    "icon": "/img/javascript.png",
-    "alt": "JavaScript logo"
-  }
+    {
+        "title": "JavaScript",
+        "slug": "javascript",
+        "icon": "/img/javascript.png",
+        "alt": "JavaScript logo"
+    }
 ]
 ```
 
@@ -123,19 +131,19 @@ Example `javascript.json`:
 
 ```json
 [
-  {
-    "id": "js-1",
-    "topic": "JavaScript",
-    "subTopic": "Fundamentals",
-    "difficulty": "Easy",
-    "question": "What is a closure?",
-    "answer": [
-      {
-        "type": "paragraph",
-        "text": "A closure is a function together with its lexical environment."
-      }
-    ]
-  }
+    {
+        "id": "js-1",
+        "topic": "JavaScript",
+        "subTopic": "Fundamentals",
+        "difficulty": "Easy",
+        "question": "What is a closure?",
+        "answer": [
+            {
+                "type": "paragraph",
+                "text": "A closure is a function together with its lexical environment."
+            }
+        ]
+    }
 ]
 ```
 
@@ -147,25 +155,27 @@ Supported answer block types are `h4`, `h5`, `paragraph`, `bold`, `info`, `warn`
 
 Logs use `console.error` and `console.warn` in development and production. Check the development terminal or your hosting provider's server logs. The application error page also logs its received error in the browser console.
 
-| Log message | Context and behavior |
-| --- | --- |
-| `[getJsonFile] Failed to load JSON data` | Logs `source`, `fileName`, and the original error for configuration, fetch, file-read, or JSON-parsing failures; rethrows the error. |
-| `[getJsonFile] JSON file not found` | Warns with `source` and `fileName` when a local file is missing or GitHub returns HTTP 404. |
-| `[processTopicData] Expected an array of questions` | Warns with `topicSlug` and returns an empty question list for non-array input. |
-| `[processTopicData] Skipped invalid topic content` | Warns with `topicSlug`, `skippedQuestions`, and `skippedBlocks` when invalid question entries or unsupported answer blocks are skipped. |
-| `[processTopicData] Failed to process question` | Logs `topicSlug`, the zero-based `questionIndex`, and the original error; rethrows unexpected processing failures. |
+| Log message                                         | Context and behavior                                                                                                                    |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `[getJsonFile] Failed to load JSON data`            | Logs `source`, `fileName`, and the original error for configuration, fetch, file-read, or JSON-parsing failures; rethrows the error.    |
+| `[getJsonFile] JSON file not found`                 | Warns with `source` and `fileName` when a local file is missing or GitHub returns HTTP 404.                                             |
+| `[processTopicData] Expected an array of questions` | Warns with `topicSlug` and returns an empty question list for non-array input.                                                          |
+| `[processTopicData] Skipped invalid topic content`  | Warns with `topicSlug`, `skippedQuestions`, and `skippedBlocks` when invalid question entries or unsupported answer blocks are skipped. |
+| `[processTopicData] Failed to process question`     | Logs `topicSlug`, the zero-based `questionIndex`, and the original error; rethrows unexpected processing failures.                      |
+| `Missing GITHUB_WEBHOOK_SECRET`                     | The webhook endpoint is not configured and responds with HTTP 500.                                                                      |
+| `GitHub JSON cache invalidated`                     | A verified push to the configured repository and branch invalidated all cached GitHub JSON.                                             |
 
 A missing catalog produces an empty topic list. A missing topic file displays the not-found page. Other load or processing failures propagate to the application error boundary during page rendering; failures during static generation can fail the build.
 
 ## Available Scripts
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Starts the local development server on port 3000. |
-| `npm run lint` | Checks the project with ESLint. |
-| `npm run build` | Creates a production build and generates topic routes using the configured data source. |
-| `npm run start` | Serves a completed production build. |
-| `npx tsc --noEmit` | Checks TypeScript types without generating output. |
+| Command            | Description                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `npm run dev`      | Starts the local development server on port 3000.                                       |
+| `npm run lint`     | Checks the project with ESLint.                                                         |
+| `npm run build`    | Creates a production build and generates topic routes using the configured data source. |
+| `npm run start`    | Serves a completed production build.                                                    |
+| `npx tsc --noEmit` | Checks TypeScript types without generating output.                                      |
 
 The configured data source must be available during the build: provide the local JSON files or GitHub credentials and network access. To verify the production workflow locally:
 
@@ -185,12 +195,14 @@ On Windows, if PowerShell blocks npm's script wrapper, use `npm.cmd` and `npx.cm
 3. A topic page loads the catalog and `<slug>.json` concurrently.
 4. `lib/process-topic-data.ts` normalizes the questions and answers and builds searchable text.
 5. Search runs in the browser against the normalized text.
-6. GitHub responses use `TOPIC_REVALIDATE_SECONDS` and cache tags `github-json` and `topic-<fileName>`.
+6. GitHub responses are cached indefinitely with `github-json` and `topic-<fileName>` tags.
+7. A verified GitHub push webhook invalidates the shared `github-json` tag so the next request loads fresh JSON.
 
 ## Project Structure
 
 ```text
 app/                       App Router pages, layouts, and route states
+app/api/webhooks/github/   Signed GitHub push webhook and cache invalidation
 components/                Shared UI and topic-page components
 context/                   Theme state and persistence
 data/json/                 Local catalog and topic files (ignored by Git)
